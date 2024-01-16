@@ -26,8 +26,8 @@ class Model:
         self.epe = EPE()
         self.lap = LapLoss()
         self.sobel = SOBEL()
-        if local_rank != -1:
-            self.flownet = DDP(self.flownet, device_ids=[local_rank], output_device=local_rank)
+        # if local_rank != -1:
+        #    self.flownet = DDP(self.flownet, device_ids=[local_rank], output_device=local_rank)
 
     def train(self):
         self.flownet.train()
@@ -57,7 +57,7 @@ class Model:
         for i in range(3):
             scale_list[i] = scale_list[i] * 1.0 / scale
         imgs = torch.cat((img0, img1), 1)
-        flow, mask, merged, flow_teacher, merged_teacher, loss_distill = self.flownet(imgs, scale_list, timestep=timestep)
+        flow, mask, mer0ged, flow_teacher, merged_teacher, loss_distill = self.flownet(imgs, scale_list, timestep=timestep)
         if TTA == False:
             return merged[2]
         else:

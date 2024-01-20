@@ -13,7 +13,7 @@ from dataset import *
 from torch.utils.data import DataLoader, Dataset, RandomSampler
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data.distributed import DistributedSampler
-
+from X_ado_train_loader import *
 device = torch.device("cuda")
 
 log_path = 'train_log'
@@ -45,7 +45,11 @@ def train(model, local_rank):
         writer_val = None
     step = 0
     nr_eval = 0
-    dataset = VimeoDataset('train')
+    transform = transforms.Compose([
+    transforms.ToTensor()  # Convert images to tensor after all other transformations
+])
+    dataset = X4K1000FPSDataset(root_dir='/home/jyzhao/Code/Datasets/X4K1000FPS', transform=transform, crop_size=(224, 224))
+    # dataset = VimeoDataset('train')
     sampler = RandomSampler(dataset)
     train_data = DataLoader(dataset, batch_size=args.batch_size, num_workers=8, pin_memory=True, drop_last=True, sampler=sampler)
     args.step_per_epoch = train_data.__len__()
@@ -62,7 +66,7 @@ def train(model, local_rank):
             data_gpu = data_gpu.to(device, non_blocking=True) / 255.
             timestep = timestep.to(device, non_blocking=True)
             imgs = data_gpu[:, :6]
-            gt = data_gpu[:, 6:9]
+            gt = data_gpu[:, 6:]
             learning_rate = get_learning_rate(step) * args.world_size / 4
             pred, info = model.update(imgs, gt, learning_rate, training=True) # pass timestep if you are training RIFEm
             train_time_interval = time.time() - time_stamp
@@ -87,6 +91,7 @@ def train(model, local_rank):
                 writer.flush()
             if local_rank == 0:
                 print('epoch:{} {}/{} time:{:.2f}+{:.2f} loss_l1:{:.4e}'.format(epoch, i, args.step_per_epoch, data_time_interval, train_time_interval, info['loss_l1']))
+        
             step += 1
         nr_eval += 1
         if nr_eval % 5 == 0:
@@ -131,7 +136,7 @@ def evaluate(model, val_data, nr_eval, local_rank, writer_val):
     eval_time_interval = time.time() - time_stamp
 
     if local_rank != 0:
-        return
+        return 
     writer_val.add_scalar('psnr', np.array(psnr_list).mean(), nr_eval)
     writer_val.add_scalar('psnr_teacher', np.array(psnr_list_teacher).mean(), nr_eval)
         
@@ -142,7 +147,12 @@ if __name__ == "__main__":
     parser.add_argument('--local_rank', default=0, type=int, help='local rank')
     parser.add_argument('--world_size', default=4, type=int, help='world size')
     args = parser.parse_args()
-    # torch.distributed.init_process_group(backend="nccl", world_size=args.world_size)
+
+    # random seed
+     #   training()
+    # --------------
+
+    torch.distributed.init_process_group(backend="nccl", world_size=args.world_size)
     torch.cuda.set_device(args.local_rank)
     seed = 1234
     random.seed(seed)
@@ -150,6 +160,7 @@ if __name__ == "__main__":
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.benchmark = True
+    args.local_rank = int(os.environ.get('LOCAL_RANK', 0))
     model = Model(args.local_rank)
     train(model, args.local_rank)
         

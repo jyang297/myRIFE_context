@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from model.warplayer import warp
 from model.refine import *
 from model.myContext import *
+from model.loss import *
 def deconv(in_planes, out_planes, kernel_size=4, stride=2, padding=1):
     return nn.Sequential(
         torch.nn.ConvTranspose2d(in_channels=in_planes, out_channels=out_planes, kernel_size=4, stride=2, padding=1),
@@ -60,6 +61,7 @@ class IFNet(nn.Module):
         self.contextnet = Contextnet()
         self.unet = Unet()
         self.mycontext = FlowContext()
+        self.VGGloss = VGGPerceptualLoss()
     def forward(self, x, scale=[4,2,1], timestep=0.5):
         img0 = x[:, :3]
         img1 = x[:, 3:6]
@@ -109,7 +111,8 @@ class IFNet(nn.Module):
         '''
         meltpre = self.mycontext(img0, img1, warped_img0, warped_img1, mask, flow)
         #for i in range(3):
-        loss_meltpre = (((meltpre -gt)**2).mean(1,True)** 0.5 * loss_mask).mean()
+        # loss_meltpre = (((meltpre -gt)**2).mean(1,True)** 0.5 * loss_mask).mean()
+        loss_meltpre = self.VGGloss(meltpre, gt)
         pass
 
         
